@@ -22,7 +22,8 @@ app.get('/menus', lunchController.todayLunchList);
 app.get('/menus/:id', lunchController.todayLunchView);
 app.post('/menus', lunchController.todayLunchInput);
 app.put('/menus/:id', lunchController.todayLunchUpdate);
-app.delete('/menus/:id')
+app.delete('/menus/:id', lunchController.todayLunchDelete);
+
 // 서버 엶과 동시에 커넥션 생성
 createConnection(connectionOptions)
 	.then((conn: any) => {

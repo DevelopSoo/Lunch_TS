@@ -84,3 +84,15 @@ export const todayLunchUpdate = async (id: string, reqName: string, reqFood: str
 	return {name: user, food:updatedFood.name};
 	
 };
+
+export const todayLunchDelete = async (id: string) => {
+	let foodRepository = getRepository(Food);
+	let foodForDelete = await foodRepository.findOne(id);
+	await foodRepository.remove(foodForDelete);
+
+	let userRepository = getRepository(User);
+	let userForDelete = await userRepository.findOne(id);
+	await userRepository.remove(userForDelete);
+
+	return {name: userForDelete.name, food: foodForDelete.name}
+}
