@@ -67,7 +67,7 @@ export const todayLunchView = async (id: string) => {
 	const row = await getRepository(Food)
 		.createQueryBuilder('food')
 		.innerJoinAndSelect('food.user', 'user')
-		.where('food.id = :id')
+		.where('food.userId = :id')
 		.setParameters({id: id})
 		.getMany();
 	
