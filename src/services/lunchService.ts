@@ -1,24 +1,39 @@
 import { createQueryBuilder, getConnection, getRepository, Transaction, TransactionRepository } from 'typeorm';
 import { User, Food } from '../entities/lunchEntity';
-import dateSub from 'date-fns/sub';
 import formatISO9075 from 'date-fns/formatISO9075';
-import { resourceLimits } from 'worker_threads';
-import { getCipherInfo } from 'crypto';
 
-
+/**
+ * 
+ * @param startDate : 2021-06-21 11:00:00
+ * @param endDate : 2021-06-22 11:00:00
+ * @return
+ * 	{
+   	 "results": [
+        {
+            "name": "예병수",
+            "food": "김치찜",
+            "updateTime": "2021-07-01 10:30:18"
+        },
+        {
+            "name": "안동원",
+            "food": "내장탕",
+            "updateTime": "2021-07-01 10:30:26"
+        }
+    ],
+    "status": "READ SUCCES"
+}
+ */
 export const todayLunchList = async (startDate: string, endDate: string) => {
-	// const users = getRepository(Food).createQueryBuilder("food").innerJoinAndSelect('food.user', 'user').getMany();
-	// [{"id":1,"name":"순대국","createdAt":"2021-06-29T12:54:54.092Z","updatedAt":"2021-06-29T12:54:54.092Z","user":{"id":1,"name":"예병수"}}]
+
 	const rows = await getRepository(Food)
-		.createQueryBuilder('food')
-		.innerJoinAndSelect('food.user', 'user')
-		.where('updatedAt BETWEEN :startDate AND :endDate')
-		.setParameters({startDate: startDate, endDate: endDate})
+		.createQueryBuilder('food') // sql 쿼리를 alias 해서 가져올꺼야~ 아무 이름도 없으면 Food로 사용됨
+		.innerJoinAndSelect('food.user', 'user') // food의 userId와 user의 id를 통해 join
+		.where('updatedAt BETWEEN :startDate AND :endDate', {startDate, endDate})
 		.getMany();
 	// [{"id":1,"name":"순대국","createdAt":"2021-06-29T12:54:54.092Z","updatedAt":"2021-06-29T12:54:54.092Z","user":{"id":1,"name":"예병수"}}]
 	
 	const results = [];
-	// createdAt은 Date 타입이라 저장하지 못해서 새로운 키값을 만듦
+	// createdAt은 Date 타입이라 string값을 저장하지 못함 -> 새로운 키값(updatedAtString)을 만듦
 	for (let i=0; i<rows.length; i++) {
 		rows[i]["updatedAtString"] = formatISO9075(rows[i].updatedAt);
 		results.push(
@@ -35,15 +50,32 @@ export const todayLunchList = async (startDate: string, endDate: string) => {
 
 
 // params로 넘어오기 때문에 id는 string이다. number로 나중에 바꿔도 문제가 되는지 확인하자.
+/**
+ * 
+ * @param id : 쿼리 id
+ * @returns 
+ * {
+    "result": {
+        "name": "예병수",
+        "food": "김치찜",
+        "updateTime": "2021-07-01 10:30:18"
+    },
+    "status": "READ SUCCESS"
+}
+ */
 export const todayLunchView = async (id: string) => {
 	const row = await getRepository(Food)
 		.createQueryBuilder('food')
 		.innerJoinAndSelect('food.user', 'user')
-		.where('food.id = :id')
+		.where('food.userId = :id')
 		.setParameters({id: id})
 		.getMany();
 	
 	const result = {};
+	if (row.length === 0) {
+		throw new Error('User is Not existed');
+	}
+	
 	for (let i=0; i<row.length; i++) {
 		row[i]["updatedAtString"] = formatISO9075(row[i].updatedAt);
 		result["name"] = row[i].user.name;
@@ -55,44 +87,126 @@ export const todayLunchView = async (id: string) => {
 };
 
 
+/**
+ * 
+ * @param reqName 
+ * @param reqFood 
+ * @returns 
+ * {
+ * 		name: "에병수"
+ * 		food: "김치찜"
+ * }
+ */
 export const todayLunchInput = async (reqName: string, reqFood: string) => {
-	let user = new User();
-	user.name = reqName;
+	const user = await getRepository(User).findOne({where: {name: reqName}});
+	
+	if (user === undefined) {
+		throw new Error("User Not Existed")
+	};
 
-	let userRepository = getRepository(User);
-	const savedUser = await userRepository.save(user);
-
-	let food = new Food();
-	food.id = savedUser.id;
+	const food = new Food();
+	food.user = user;
 	food.name = reqFood;
 
 	const foodRepository = getRepository(Food);
 	const savedFood = await foodRepository.save(food);
 
-	return {name: savedUser.name, food: savedFood.name}
+	return {name: user.name, food: savedFood.name};
 };
 
-export const todayLunchUpdate = async (id: string, reqName: string, reqFood: string) => {
-	let foodRepository = getRepository(Food);
-	let foodForUpdate = await foodRepository.findOne(id);
-	foodForUpdate.name = reqFood;
-	const updatedFood = await foodRepository.save(foodForUpdate);
-	
-	let updatedUser = getRepository(User).findOne(id);
-	let user = (await updatedUser).name;
+/**
+ * 
+ * @param id 
+ * @param reqName 
+ * @param reqFood 
+ * @param startDate 
+ * @param endDate 
+ * @returns 
+ * 		{name: 예병수, food: 짜장면}
+ */	
+// food의 userId와 시간(오늘 오전 9 ~ 점심)을 파악해서 이름과 food를 가져온다. 
+export const todayLunchUpdate = async (id: string, reqName: string, reqFood: string, startDate: string, endDate: string) => {
+	const user = await getRepository(User).findOne(id);
 
-	return {name: user, food:updatedFood.name};
-	
+	if (user === undefined) {
+		throw new Error("User Not Existed")
+	};
+	// 존재하는 user인지 체크해야 함
+	const row = await getRepository(Food)
+		.createQueryBuilder()
+		.update()
+		.set({name: reqFood})
+		.where("userId = :id", {id: user.id})
+		.andWhere("updatedAt BETWEEN :startDate AND :endDate", {startDate: startDate, endDate: endDate})
+		.execute();
+
+	return {name: user.name, food:reqFood};
 };
 
-export const todayLunchDelete = async (id: string) => {
-	let foodRepository = getRepository(Food);
-	let foodForDelete = await foodRepository.findOne(id);
-	await foodRepository.remove(foodForDelete);
+/**
+ * 
+ * @param id 
+ * @param reqName 
+ * @param reqFood 
+ * @param startDate 
+ * @param endDate 
+ * @returns 
+ * 		{name: 예병수, food: 짜장면}
+ */	
+export const todayLunchDelete = async (id: string, startDate: string, endDate: string) => {
+	const user = await getRepository(User).findOne(id);
+	
+	if (user === undefined) {
+		throw new Error("User Not Existed")
+	};
+	
+	const food = await getRepository(Food)
+		.createQueryBuilder('food')
+		.innerJoinAndSelect('food.user', 'user')
+		.where('food.userId = :id')
+		.setParameters({id: user.id})
+		.getOne();
 
-	let userRepository = getRepository(User);
-	let userForDelete = await userRepository.findOne(id);
-	await userRepository.remove(userForDelete);
+	const row = await getRepository(Food)
+		.createQueryBuilder()
+		.delete()
+		.where("userId = :id", {id: user.id})
+		.andWhere("updatedAt BETWEEN :startDate AND :endDate", {startDate: startDate, endDate: endDate})
+		.execute()
 
-	return {name: userForDelete.name, food: foodForDelete.name}
-}
+	return {name: user.name, food: food.name}
+};
+
+export const slackLunchTodayList = async (startDate: string, endDate: string) => {
+	const rows = await getRepository(Food)
+	.createQueryBuilder('food') // sql 쿼리를 alias 해서 가져올꺼야~ 아무 이름도 없으면 Food로 사용됨
+	.innerJoinAndSelect('food.user', 'user') // food의 userId와 user의 id를 통해 join
+	.where('updatedAt BETWEEN :startDate AND :endDate', {startDate, endDate})
+	.getMany();
+
+	console.log(rows)
+	const results: Object[] = []
+	for (let i: number=0; i<rows.length; i++) {
+		results.push(
+			{
+				"type": "section",
+				"text": {
+					"type": "mrkdwn",
+					"text": `이름: ${rows[i].user.name}\n음식: ${rows[i].name}`
+				}
+			}
+		);
+	};
+	console.log(results)
+	// webhook의 attachments의 block 모양을 맞추기 위해 앞,뒤에 다음과 같이 정보를 삽입
+	results.push({"type": "divider"}); // divider선
+	results.unshift({"type": "divider"}); 
+	results.unshift({
+		"type": "section",
+		"text": {
+			"type": "mrkdwn",
+			"text": "*오늘의 점심 리스트입니다.*"}
+	}); // 알림 맨 위에 나오는 메시지
+
+	return results
+};

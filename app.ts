@@ -3,10 +3,21 @@ import "reflect-metadata";
 import { createConnection} from "typeorm";
 import { connectionOptions } from './db';
 import * as lunchController from './src/controllers/lunchController';
-import bodyParser from 'body-parser';
+import * as bodyParser from 'body-parser';
+import schedule from "node-schedule";
 
 const app = express();
 const port = 3000;
+
+// 먹고 싶은 점심 작성하라는 알람 (매일 11시)
+schedule.scheduleJob("* 11 * * *", () => {
+	lunchController.slackSendAlarmForLunch();
+});
+
+// 오늘의 점심 리스트 슬랙 알림 (매일 12시)
+schedule.scheduleJob('49 * * * *', () => {
+  lunchController.slackSendLunchTodayList();
+});
 
 app.listen(port, () => {
   console.log(`port ${port} start!`);
@@ -28,8 +39,6 @@ app.delete('/menus/:id', lunchController.todayLunchDelete);
 createConnection(connectionOptions)
 	.then((conn: any) => {
 		console.log('Database connection succeeded');
-		return true
-	}).catch((err: any) => {
+	}).catch((err: Error) => {
 		console.log(`${err} Error Happened!`);
-		return false
 	});
