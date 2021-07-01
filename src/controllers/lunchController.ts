@@ -141,5 +141,5 @@ export const todayLunchDelete = async (req: Request, res: Response) => {
 		return res.status(200).json({"message": `name: ${deletedUserAndFood["name"]} food: ${deletedUserAndFood["food"]} is deleted!`}) 
 	} catch (e){
 		return res.json({"error_message": e.message});
-	}
+	};
 };
