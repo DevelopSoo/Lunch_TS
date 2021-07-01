@@ -67,7 +67,7 @@ export const todayLunchView = async (id: string) => {
 	const row = await getRepository(Food)
 		.createQueryBuilder('food')
 		.innerJoinAndSelect('food.user', 'user')
-		.where('food.id = :id')
+		.where('food.userId = :id')
 		.setParameters({id: id})
 		.getMany();
 	
@@ -175,4 +175,38 @@ export const todayLunchDelete = async (id: string, startDate: string, endDate: s
 		.execute()
 
 	return {name: user.name, food: food.name}
+};
+
+export const slackLunchTodayList = async (startDate: string, endDate: string) => {
+	const rows = await getRepository(Food)
+	.createQueryBuilder('food') // sql 쿼리를 alias 해서 가져올꺼야~ 아무 이름도 없으면 Food로 사용됨
+	.innerJoinAndSelect('food.user', 'user') // food의 userId와 user의 id를 통해 join
+	.where('updatedAt BETWEEN :startDate AND :endDate', {startDate, endDate})
+	.getMany();
+
+	console.log(rows)
+	const results: Object[] = []
+	for (let i: number=0; i<rows.length; i++) {
+		results.push(
+			{
+				"type": "section",
+				"text": {
+					"type": "mrkdwn",
+					"text": `이름: ${rows[i].user.name}\n음식: ${rows[i].name}`
+				}
+			}
+		);
+	};
+	console.log(results)
+	// webhook의 attachments의 block 모양을 맞추기 위해 앞,뒤에 다음과 같이 정보를 삽입
+	results.push({"type": "divider"}); // divider선
+	results.unshift({"type": "divider"}); 
+	results.unshift({
+		"type": "section",
+		"text": {
+			"type": "mrkdwn",
+			"text": "*오늘의 점심 리스트입니다.*"}
+	}); // 알림 맨 위에 나오는 메시지
+
+	return results
 };

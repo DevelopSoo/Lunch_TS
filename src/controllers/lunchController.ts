@@ -2,7 +2,8 @@ import {Request, Response} from 'express'
 import dateSub from 'date-fns/sub';
 import formatISO9075 from 'date-fns/formatISO9075';
 import * as lunchService from '../services/lunchService';
-
+import { webhookUri } from '../../secret';
+import Slack from 'slack-node';
 /**
  * 24시간 동안 조사된 전체 점심메뉴 조회
  * @param req : Request
@@ -142,4 +143,57 @@ export const todayLunchDelete = async (req: Request, res: Response) => {
 	} catch (e){
 		return res.json({"error_message": e.message});
 	};
+};
+
+export const slackSendAlarmForLunch = async () => {
+	const slack = new Slack();
+	slack.setWebhook(webhookUri);
+
+	slack.webhook({
+		channel: "#개발",
+		username: "slack bot",
+		attachments: [
+		{
+			"color": "#f2c744",
+			"blocks": [
+				{
+					"type": "section",
+					"text": {
+						"type": "mrkdwn",
+						"text": "*오늘 점심을 선택해주세요!!*"}
+				}
+			]
+		}
+		]
+	}, (err, response) => {
+		console.log(response);
+	});
+};
+
+export const slackSendLunchTodayList = async () => {
+	let endDate: string | Date
+	let startDate: string | Date
+
+	endDate = new Date();
+	startDate = dateSub(endDate, {hours: 12});
+	endDate = formatISO9075(endDate);
+	startDate = formatISO9075(startDate);
+	console.log(startDate, endDate)
+	const lunchListForSlack = await lunchService.slackLunchTodayList(startDate, endDate);
+
+	const slack = new Slack();
+	slack.setWebhook(webhookUri);
+
+  slack.webhook({
+    channel: "#개발",
+    username: "slack bot",
+    attachments: [
+      {
+        "color": "#f2c744",
+        "blocks": lunchListForSlack
+      }
+    ]
+  }, (err, response) => {
+    console.log(response);
+  });
 };
