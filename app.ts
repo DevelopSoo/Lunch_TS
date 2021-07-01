@@ -3,7 +3,7 @@ import "reflect-metadata";
 import { createConnection} from "typeorm";
 import { connectionOptions } from './db';
 import * as lunchController from './src/controllers/lunchController';
-import bodyParser from 'body-parser';
+import * as bodyParser from 'body-parser';
 
 const app = express();
 const port = 3000;
@@ -28,8 +28,6 @@ app.delete('/menus/:id', lunchController.todayLunchDelete);
 createConnection(connectionOptions)
 	.then((conn: any) => {
 		console.log('Database connection succeeded');
-		return true
-	}).catch((err: any) => {
+	}).catch((err: Error) => {
 		console.log(`${err} Error Happened!`);
-		return false
 	});
